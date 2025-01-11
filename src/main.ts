@@ -43,7 +43,7 @@ async function getAllVideosFromPlaylist(playlistId: string): Promise<{ title: st
         do {
             const response = await axios.get(url, { params: { ...params, pageToken: nextPageToken } });
             const items = response.data.items;
-            items.forEach((item: any) => {
+            items.forEach((item) => {
                 videos.push({
                     title: item.snippet.title,
                     videoId: item.snippet.resourceId.videoId,
