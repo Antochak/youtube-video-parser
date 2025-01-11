@@ -1,4 +1,7 @@
 import axios from "axios";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 
 const API_KEY = "AIzaSyDFftHSo0xYRK0PAjD5Eoc_fCOtmWflVHc";
 const CHANNEL_ID = "UCL-HTw4Wfi9Igh9r1CBrrDA";
@@ -27,7 +30,7 @@ async function getUploadsPlaylistId(channelId: string): Promise<string> {
 }
 
 // Функция для получения всех видео из указанного плейлиста
-async function getAllVideosFromPlaylist(playlistId: string): Promise<{ title: string; videoId: string }[]> {
+async function getAllVideosFromPlaylist(playlistId: string): Promise<{ title: string; videoId: string; description: string; date: string }[]> {
     const url = `${BASE_URL}/playlistItems`;
     const params = {
         part: "snippet",
@@ -37,7 +40,7 @@ async function getAllVideosFromPlaylist(playlistId: string): Promise<{ title: st
     };
 
     let nextPageToken: string | undefined = undefined;
-    const videos: { title: string; videoId: string }[] = [];
+    const videos: { title: string; videoId: string; description: string; date: string }[] = [];
 
     try {
         do {
@@ -47,6 +50,8 @@ async function getAllVideosFromPlaylist(playlistId: string): Promise<{ title: st
                 videos.push({
                     title: item.snippet.title,
                     videoId: item.snippet.resourceId.videoId,
+                    description: item.snippet.description,
+                    date: item.snippet.publishedAt.split('T')[0], // Форматируем дату
                 });
             });
             nextPageToken = response.data.nextPageToken;
@@ -59,6 +64,25 @@ async function getAllVideosFromPlaylist(playlistId: string): Promise<{ title: st
     }
 }
 
+function saveVideosToCSV (videos: { title: string; videoId: string; description: string; date: string }[]) {
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = path.dirname(__filename);
+    const filename = path.join(__dirname, 'list.csv');
+    const header = ["Порядковый номер", "Ссылка", "Название", "Описание", "Дата"];
+    const rows = videos.map((video, index) => [
+        index + 1,
+        `https://www.youtube.com/watch?v=${video.videoId}`,
+        video.title,
+        video.description,
+        video.date,
+    ]);
+
+    const csvContent = [header, ...rows].map(row => row.join(",")).join("\n");
+
+    fs.writeFileSync(filename, csvContent, 'utf-8');
+    console.log(`Список видео сохранен в list.csv`);
+}
+
 (async () => {
     try {
         console.log("Получение ID плейлиста...");
@@ -67,10 +91,8 @@ async function getAllVideosFromPlaylist(playlistId: string): Promise<{ title: st
         console.log("Получение списка видео...");
         const videos = await getAllVideosFromPlaylist(playlistId);
 
-        console.log("Список видео:");
-        videos.forEach((video, index) => {
-            console.log(`${index + 1}. ${video.title} (https://www.youtube.com/watch?v=${video.videoId})`);
-        });
+        console.log("Сохранение списка видео в list.csv...");
+        saveVideosToCSV(videos);
     } catch (error) {
         console.error("Произошла ошибка:", error.message);
     }
