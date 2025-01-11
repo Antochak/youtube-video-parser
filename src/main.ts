@@ -7,6 +7,10 @@ const API_KEY = "AIzaSyDFftHSo0xYRK0PAjD5Eoc_fCOtmWflVHc";
 const CHANNEL_ID = "UCL-HTw4Wfi9Igh9r1CBrrDA";
 const BASE_URL = "https://www.googleapis.com/youtube/v3";
 
+// Получаем путь к текущей директории
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 // Функция для получения ID плейлиста с загруженными видео канала
 async function getUploadsPlaylistId(channelId: string): Promise<string> {
     const url = `${BASE_URL}/channels`;
@@ -30,7 +34,7 @@ async function getUploadsPlaylistId(channelId: string): Promise<string> {
 }
 
 // Функция для получения всех видео из указанного плейлиста
-async function getAllVideosFromPlaylist(playlistId: string): Promise<{ title: string; videoId: string; description: string; date: string }[]> {
+async function getAllVideosFromPlaylist(playlistId: string): Promise<{ title: string; videoId: string; description: string; publishedAt: string }[]> {
     const url = `${BASE_URL}/playlistItems`;
     const params = {
         part: "snippet",
@@ -40,7 +44,7 @@ async function getAllVideosFromPlaylist(playlistId: string): Promise<{ title: st
     };
 
     let nextPageToken: string | undefined = undefined;
-    const videos: { title: string; videoId: string; description: string; date: string }[] = [];
+    const videos: { title: string; videoId: string; description: string; publishedAt: string }[] = [];
 
     try {
         do {
@@ -51,7 +55,7 @@ async function getAllVideosFromPlaylist(playlistId: string): Promise<{ title: st
                     title: item.snippet.title,
                     videoId: item.snippet.resourceId.videoId,
                     description: item.snippet.description,
-                    date: item.snippet.publishedAt.split('T')[0], // Форматируем дату
+                    publishedAt: item.snippet.publishedAt,
                 });
             });
             nextPageToken = response.data.nextPageToken;
@@ -64,23 +68,22 @@ async function getAllVideosFromPlaylist(playlistId: string): Promise<{ title: st
     }
 }
 
-function saveVideosToCSV (videos: { title: string; videoId: string; description: string; date: string }[]) {
-    const __filename = fileURLToPath(import.meta.url);
-    const __dirname = path.dirname(__filename);
-    const filename = path.join(__dirname, 'list.csv');
-    const header = ["Порядковый номер", "Ссылка", "Название", "Описание", "Дата"];
-    const rows = videos.map((video, index) => [
-        index + 1,
-        `https://www.youtube.com/watch?v=${video.videoId}`,
-        video.title,
-        video.description,
-        video.date,
-    ]);
+// Функция для записи данных в CSV
+function writeToCSV(videos: { title: string; videoId: string; description: string; publishedAt: string }[], filename: string) {
+    const csvRows = videos.map((video, index) => {
+        const url = `https://www.youtube.com/watch?v=${video.videoId}`;
+        const description = video.description
+            .replace(/\n/g, '\n') // сохраняем переносы строк
+            .replace(/"/g, '""'); // экранируем кавычки
+        const date = new Date(video.publishedAt).toISOString().split('T')[0]; // Форматируем дату в YYYY-MM-DD
 
-    const csvContent = [header, ...rows].map(row => row.join(",")).join("\n");
+        // Возвращаем строку для записи, разделяя элементы
+        return `${index + 1} ${url}\n${video.title}\n${date}\n${description}`;
+    });
 
-    fs.writeFileSync(filename, csvContent, 'utf-8');
-    console.log(`Список видео сохранен в list.csv`);
+    const csvContent = csvRows.join("\n\n"); // Пустая строка для отступа между видео
+
+    fs.writeFileSync(filename, csvContent);
 }
 
 (async () => {
@@ -91,8 +94,11 @@ function saveVideosToCSV (videos: { title: string; videoId: string; description:
         console.log("Получение списка видео...");
         const videos = await getAllVideosFromPlaylist(playlistId);
 
-        console.log("Сохранение списка видео в list.csv...");
-        saveVideosToCSV(videos);
+        console.log("Запись в файл...");
+        const filename = path.join(__dirname, "list.csv");
+        writeToCSV(videos, filename);
+
+        console.log("Файл list.csv успешно создан!");
     } catch (error) {
         console.error("Произошла ошибка:", error.message);
     }
