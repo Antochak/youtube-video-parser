@@ -1,6 +1,7 @@
 import axios from "axios";
 import fs from "fs";
 import path from "path";
+import { YoutubeTranscript } from "youtube-transcript";
 
 const API_KEY = "AIzaSyDFftHSo0xYRK0PAjD5Eoc_fCOtmWflVHc";
 const CHANNEL_ID = "UCL-HTw4Wfi9Igh9r1CBrrDA";
@@ -60,6 +61,17 @@ function parseDuration(durationISO: string): number {
     return hours * 3600 + minutes * 60 + seconds;
 }
 
+async function getVideoTranscription(videoId: string): Promise<string> {
+    try {
+        const transcript = await YoutubeTranscript.fetchTranscript(videoId);
+        console.log("Transcript structure:", transcript);
+        return transcript.map((item) => item.text).join(" ");
+    } catch (error) {
+        console.error(`Ошибка при получении транскрипции видео ${videoId}:`, error.message);
+        return "Транскрипция недоступна.";
+    }
+}
+
 async function getAllVideosFromPlaylist(playlistId: string): Promise<{ title: string; videoId: string; description: string; publishedAt: string; duration: number }[]> {
     const url = `${BASE_URL}/playlistItems`;
     const params = {
@@ -113,7 +125,11 @@ async function getAllVideosFromPlaylist(playlistId: string): Promise<{ title: st
             fs.mkdirSync(baseDir, { recursive: true });
         }
 
-        videos.forEach((video) => {
+        for (const video of videos) {
+            console.log(`Обработка видео: ${video.title} (${video.videoId})`);
+
+            const transcription = await getVideoTranscription(video.videoId);
+
             const videoData = {
                 title: video.title,
                 videoId: video.videoId,
@@ -122,6 +138,7 @@ async function getAllVideosFromPlaylist(playlistId: string): Promise<{ title: st
                 url: `https://www.youtube.com/watch?v=${video.videoId}`,
                 date: new Date(video.publishedAt).toISOString().split("T")[0],
                 duration: video.duration,
+                transcription,
             };
 
             const filename = `${videoData.date}-${videoData.videoId}.json`;
@@ -129,25 +146,10 @@ async function getAllVideosFromPlaylist(playlistId: string): Promise<{ title: st
 
             // Записываем данные в файл
             fs.writeFileSync(filePath, JSON.stringify(videoData, null, 2));
-        });
-
-        // Update list.json
-        const listFilePath = path.join(process.cwd(), "out", "list.json");
-        let listData = [];
-        if (fs.existsSync(listFilePath)) {
-            listData = JSON.parse(fs.readFileSync(listFilePath, "utf-8"));
+            console.log(`Файл ${filename} успешно создан.`);
         }
 
-        const updatedListData = listData.map((video) => {
-            const videoDetails = videos.find(v => v.videoId === video.videoId);
-            return {
-                ...video,
-                duration: videoDetails ? videoDetails.duration : 0,
-            };
-        });
-
-        fs.writeFileSync(listFilePath, JSON.stringify(updatedListData, null, 2));
-        console.log("list.json успешно обновлен.");
+        console.log("Все файлы успешно созданы.");
     } catch (error) {
         console.error("Произошла ошибка:", error.message);
     }
