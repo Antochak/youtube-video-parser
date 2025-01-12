@@ -27,7 +27,40 @@ async function getUploadsPlaylistId(channelId: string): Promise<string> {
     }
 }
 
-async function getAllVideosFromPlaylist(playlistId: string): Promise<{ title: string; videoId: string; description: string; publishedAt: string }[]> {
+async function getVideoDetails(videoId: string): Promise<{ duration: number }> {
+    const url = `${BASE_URL}/videos`;
+    const params = {
+        part: "contentDetails",
+        id: videoId,
+        key: API_KEY,
+    };
+
+    try {
+        const response = await axios.get(url, { params });
+        if (response.data.items.length === 0) {
+            throw new Error("Видео не найдено.");
+        }
+        const durationISO = response.data.items[0].contentDetails.duration;
+        const duration = parseDuration(durationISO);
+        return { duration };
+    } catch (error) {
+        console.error("Ошибка при получении деталей видео:", error.message);
+        throw error;
+    }
+}
+
+function parseDuration(durationISO: string): number {
+    const match = durationISO.match(/PT(\d+H)?(\d+M)?(\d+S)?/);
+    if (!match) return 0;
+
+    const hours = parseInt(match[1]) || 0;
+    const minutes = parseInt(match[2]) || 0;
+    const seconds = parseInt(match[3]) || 0;
+
+    return hours * 3600 + minutes * 60 + seconds;
+}
+
+async function getAllVideosFromPlaylist(playlistId: string): Promise<{ title: string; videoId: string; description: string; publishedAt: string; duration: number }[]> {
     const url = `${BASE_URL}/playlistItems`;
     const params = {
         part: "snippet",
@@ -37,20 +70,23 @@ async function getAllVideosFromPlaylist(playlistId: string): Promise<{ title: st
     };
 
     let nextPageToken: string | undefined = undefined;
-    const videos: { title: string; videoId: string; description: string; publishedAt: string }[] = [];
+    const videos: { title: string; videoId: string; description: string; publishedAt: string; duration: number }[] = [];
 
     try {
         do {
             const response = await axios.get(url, { params: { ...params, pageToken: nextPageToken } });
             const items = response.data.items;
-            items.forEach((item) => {
+            for (const item of items) {
+                const videoId = item.snippet.resourceId.videoId;
+                const { duration } = await getVideoDetails(videoId);
                 videos.push({
                     title: item.snippet.title,
-                    videoId: item.snippet.resourceId.videoId,
+                    videoId,
                     description: item.snippet.description,
                     publishedAt: item.snippet.publishedAt,
+                    duration,
                 });
-            });
+            }
             nextPageToken = response.data.nextPageToken;
         } while (nextPageToken);
 
@@ -85,6 +121,7 @@ async function getAllVideosFromPlaylist(playlistId: string): Promise<{ title: st
                 publishedAt: video.publishedAt,
                 url: `https://www.youtube.com/watch?v=${video.videoId}`,
                 date: new Date(video.publishedAt).toISOString().split("T")[0],
+                duration: video.duration,
             };
 
             const filename = `${videoData.date}-${videoData.videoId}.json`;
@@ -94,7 +131,23 @@ async function getAllVideosFromPlaylist(playlistId: string): Promise<{ title: st
             fs.writeFileSync(filePath, JSON.stringify(videoData, null, 2));
         });
 
-        console.log("Файлы успешно созданы в директории:", baseDir);
+        // Update list.json
+        const listFilePath = path.join(process.cwd(), "out", "list.json");
+        let listData = [];
+        if (fs.existsSync(listFilePath)) {
+            listData = JSON.parse(fs.readFileSync(listFilePath, "utf-8"));
+        }
+
+        const updatedListData = listData.map((video) => {
+            const videoDetails = videos.find(v => v.videoId === video.videoId);
+            return {
+                ...video,
+                duration: videoDetails ? videoDetails.duration : 0,
+            };
+        });
+
+        fs.writeFileSync(listFilePath, JSON.stringify(updatedListData, null, 2));
+        console.log("list.json успешно обновлен.");
     } catch (error) {
         console.error("Произошла ошибка:", error.message);
     }
