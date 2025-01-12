@@ -1,14 +1,10 @@
 import axios from "axios";
 import fs from "fs";
 import path from "path";
-import { fileURLToPath } from "url";
 
 const API_KEY = "AIzaSyDFftHSo0xYRK0PAjD5Eoc_fCOtmWflVHc";
 const CHANNEL_ID = "UCL-HTw4Wfi9Igh9r1CBrrDA";
 const BASE_URL = "https://www.googleapis.com/youtube/v3";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 async function getUploadsPlaylistId(channelId: string): Promise<string> {
     const url = `${BASE_URL}/channels`;
@@ -65,23 +61,6 @@ async function getAllVideosFromPlaylist(playlistId: string): Promise<{ title: st
     }
 }
 
-
-function writeToCSV(videos: { title: string; videoId: string; description: string; publishedAt: string }[], filename: string) {
-    const csvRows = videos.map((video, index) => {
-        const url = `https://www.youtube.com/watch?v=${video.videoId}`;
-        const description = video.description
-            .replace(/\n/g, '\n')
-            .replace(/"/g, '""');
-        const date = new Date(video.publishedAt).toISOString().split('T')[0]; 
-
-        return `${index + 1} ${url}\n${video.title}\n${date}\n${description}`;
-    });
-
-    const csvContent = csvRows.join("\n\n"); // Пустая строка для отступа между видео
-
-    fs.writeFileSync(filename, csvContent);
-}
-
 (async () => {
     try {
         console.log("Получение ID плейлиста...");
@@ -89,12 +68,22 @@ function writeToCSV(videos: { title: string; videoId: string; description: strin
 
         console.log("Получение списка видео...");
         const videos = await getAllVideosFromPlaylist(playlistId);
+        console.log("Получено", videos.length, "видео");
+
+        const preparedVideos = videos.map((video) => ({
+            title: video.title,
+            videoId: video.videoId,
+            description: video.description,
+            publishedAt: video.publishedAt,
+            url: `https://www.youtube.com/watch?v=${video.videoId}`,
+            date: new Date(video.publishedAt).toISOString().split('T')[0],
+        }));
 
         console.log("Запись в файл...");
-        const filename = path.join(__dirname, "list.csv");
-        writeToCSV(videos, filename);
+        const filenameJson = path.join(process.cwd(), "out", "list.json");
+        fs.writeFileSync(filenameJson, JSON.stringify(preparedVideos, null, 2));
 
-        console.log("Файл list.csv успешно создан!");
+        console.log("Файл list.json успешно создан!");
     } catch (error) {
         console.error("Произошла ошибка:", error.message);
     }

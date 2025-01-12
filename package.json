@@ -24,6 +24,7 @@
     "vitest": "~2.1"
   },
   "scripts": {
+    "prestart": "mkdir -p out && npm run build",
     "start": "node build/src/main.js",
     "clean": "rimraf coverage build tmp",
     "prebuild": "npm run lint",
