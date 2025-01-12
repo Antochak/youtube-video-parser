@@ -70,20 +70,31 @@ async function getAllVideosFromPlaylist(playlistId: string): Promise<{ title: st
         const videos = await getAllVideosFromPlaylist(playlistId);
         console.log("Получено", videos.length, "видео");
 
-        const preparedVideos = videos.map((video) => ({
-            title: video.title,
-            videoId: video.videoId,
-            description: video.description,
-            publishedAt: video.publishedAt,
-            url: `https://www.youtube.com/watch?v=${video.videoId}`,
-            date: new Date(video.publishedAt).toISOString().split('T')[0],
-        }));
+        const baseDir = path.join(process.cwd(), "out", "transcriptions");
 
-        console.log("Запись в файл...");
-        const filenameJson = path.join(process.cwd(), "out", "list.json");
-        fs.writeFileSync(filenameJson, JSON.stringify(preparedVideos, null, 2));
+        // Создаем директорию, если она не существует
+        if (!fs.existsSync(baseDir)) {
+            fs.mkdirSync(baseDir, { recursive: true });
+        }
 
-        console.log("Файл list.json успешно создан!");
+        videos.forEach((video) => {
+            const videoData = {
+                title: video.title,
+                videoId: video.videoId,
+                description: video.description,
+                publishedAt: video.publishedAt,
+                url: `https://www.youtube.com/watch?v=${video.videoId}`,
+                date: new Date(video.publishedAt).toISOString().split("T")[0],
+            };
+
+            const filename = `${videoData.date}-${videoData.videoId}.json`;
+            const filePath = path.join(baseDir, filename);
+
+            // Записываем данные в файл
+            fs.writeFileSync(filePath, JSON.stringify(videoData, null, 2));
+        });
+
+        console.log("Файлы успешно созданы в директории:", baseDir);
     } catch (error) {
         console.error("Произошла ошибка:", error.message);
     }
