@@ -7,7 +7,7 @@ const API_KEY = "AIzaSyDFftHSo0xYRK0PAjD5Eoc_fCOtmWflVHc";
 const CHANNEL_ID = "UCL-HTw4Wfi9Igh9r1CBrrDA";
 const BASE_URL = "https://www.googleapis.com/youtube/v3";
 
-async function getUploadsPlaylistId(channelId: string): Promise<string> {
+async function getUploadsPlaylistId(channelId) {
     const url = `${BASE_URL}/channels`;
     const params = {
         part: "contentDetails",
@@ -28,7 +28,7 @@ async function getUploadsPlaylistId(channelId: string): Promise<string> {
     }
 }
 
-async function getVideoDetails(videoId: string): Promise<{ duration: number }> {
+async function getVideoDetails(videoId) {
     const url = `${BASE_URL}/videos`;
     const params = {
         part: "contentDetails",
@@ -50,7 +50,7 @@ async function getVideoDetails(videoId: string): Promise<{ duration: number }> {
     }
 }
 
-function parseDuration(durationISO: string): number {
+function parseDuration(durationISO) {
     const match = durationISO.match(/PT(\d+H)?(\d+M)?(\d+S)?/);
     if (!match) return 0;
 
@@ -61,10 +61,9 @@ function parseDuration(durationISO: string): number {
     return hours * 3600 + minutes * 60 + seconds;
 }
 
-async function getVideoTranscription(videoId: string): Promise<string> {
+async function getVideoTranscription(videoId) {
     try {
         const transcript = await YoutubeTranscript.fetchTranscript(videoId);
-        console.log("Transcript structure:", transcript);
         return transcript.map((item) => item.text).join(" ");
     } catch (error) {
         console.error(`Ошибка при получении транскрипции видео ${videoId}:`, error.message);
@@ -72,7 +71,7 @@ async function getVideoTranscription(videoId: string): Promise<string> {
     }
 }
 
-async function getAllVideosFromPlaylist(playlistId: string): Promise<{ title: string; videoId: string; description: string; publishedAt: string; duration: number }[]> {
+async function getAllVideosFromPlaylist(playlistId) {
     const url = `${BASE_URL}/playlistItems`;
     const params = {
         part: "snippet",
@@ -81,8 +80,8 @@ async function getAllVideosFromPlaylist(playlistId: string): Promise<{ title: st
         key: API_KEY,
     };
 
-    let nextPageToken: string | undefined = undefined;
-    const videos: { title: string; videoId: string; description: string; publishedAt: string; duration: number }[] = [];
+    let nextPageToken;
+    const videos = [];
 
     try {
         do {
@@ -109,7 +108,7 @@ async function getAllVideosFromPlaylist(playlistId: string): Promise<{ title: st
     }
 }
 
-(async () => {
+async function generateJSON() {
     try {
         console.log("Получение ID плейлиста...");
         const playlistId = await getUploadsPlaylistId(CHANNEL_ID);
@@ -149,8 +148,66 @@ async function getAllVideosFromPlaylist(playlistId: string): Promise<{ title: st
             console.log(`Файл ${filename} успешно создан.`);
         }
 
-        console.log("Все файлы успешно созданы.");
+        console.log("Все файлы JSON успешно созданы.");
     } catch (error) {
         console.error("Произошла ошибка:", error.message);
     }
-})();
+}
+
+async function generateTXT() {
+    try {
+        console.log("Получение ID плейлиста...");
+        const playlistId = await getUploadsPlaylistId(CHANNEL_ID);
+
+        console.log("Получение списка видео...");
+        const videos = await getAllVideosFromPlaylist(playlistId);
+        console.log("Получено", videos.length, "видео");
+
+        const baseDir = path.join(process.cwd(), "out", "text");
+
+        // Создаем директорию, если она не существует
+        if (!fs.existsSync(baseDir)) {
+            fs.mkdirSync(baseDir, { recursive: true });
+        }
+
+        for (const video of videos) {
+            console.log(`Обработка видео: ${video.title} (${video.videoId})`);
+
+            const transcription = await getVideoTranscription(video.videoId);
+
+            const filename = `${new Date(video.publishedAt).toISOString().split("T")[0]}-${video.videoId}.txt`;
+            const filePath = path.join(baseDir, filename);
+
+            // Записываем данные в файл
+            fs.writeFileSync(filePath, transcription);
+            console.log(`Файл ${filename} успешно создан.`);
+        }
+
+        console.log("Все текстовые файлы успешно созданы.");
+    } catch (error) {
+        console.error("Произошла ошибка:", error.message);
+    }
+}
+
+async function main() {
+    const args = process.argv.slice(2); 
+    if (args.length === 0) {
+        console.log("Please provide a command: 'json' or 'txt'");
+        return;
+    }
+
+    const command = args[0];
+
+    switch (command) {
+        case 'json':
+            await generateJSON();
+            break;
+        case 'txt':
+            await generateTXT();
+            break;
+        default:
+            console.log("Unknown command. Use 'json' or 'txt'.");
+    }
+}
+
+main();
